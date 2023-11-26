@@ -1,0 +1,130 @@
+
+//+------------------------------------------------------------------+
+//|                                                   Gold Trading Artist|
+//|                                                     forexroboteasy.com|
+//|                                           Forex Robot Easy Team|
+//|                                           Terms of Reference|
+//+------------------------------------------------------------------+
+
+//--- Input parameters
+input int SpreadLimit=30;                           // Spread Limit
+input bool MM=true;                                 // Money Management
+input double AutoLotSize=1.0;                       // Auto Lot Size
+input double ManualLotSize=0.01;                    // Manual Lot Size
+input int StopLoss=1500;                            // Stop Loss
+input int MAPeriod=5;                               // MA Period
+input ENUM_TIMEFRAMES MATimeframe=PERIOD_M5;         // MA Timeframe
+input ENUM_MA_METHOD MAMethod=MODE_SMA;              // MA Method
+
+//--- Global variables
+int ticket=0;                                       // Trade ticket
+double lotSize=0;                                   // Calculated lot size
+
+//+------------------------------------------------------------------+
+//| Custom indicator initialization function                         |
+//+------------------------------------------------------------------+
+int OnInit()
+  {
+//--- Check settings
+   if(SpreadLimit<30 || SpreadLimit>50)
+     {
+      Print('Invalid Spread Limit value!');
+      return INIT_FAILED;
+     }
+   if(MM && (AutoLotSize<1.0 || AutoLotSize>2.0))
+     {
+      Print('Invalid Auto Lot Size value!');
+      return INIT_FAILED;
+     }
+   if(!MM && ManualLotSize!=0.01)
+     {
+      Print('Invalid Manual Lot Size value!');
+      return INIT_FAILED;
+     }
+   if(StopLoss<=0)
+     {
+      Print('Invalid Stop Loss value!');
+      return INIT_FAILED;
+     }
+   if(MAPeriod<=0)
+     {
+      Print('Invalid MA Period value!');
+      return INIT_FAILED;
+     }
+   if(MATimeframe<0 || MATimeframe>PERIOD_D1)
+     {
+      Print('Invalid MA Timeframe value!');
+      return INIT_FAILED;
+     }
+   if(MAMethod<MODE_SMA || MAMethod>MODE_SMMA)
+     {
+      Print('Invalid MA Method value!');
+      return INIT_FAILED;
+     }
+//---
+
+   return(INIT_SUCCEEDED);
+  }
+
+//+------------------------------------------------------------------+
+//| Custom indicator iteration function                              |
+//+------------------------------------------------------------------+
+void OnTick()
+  {
+   double MA=iMA(Symbol(),MATimeframe,MAPeriod,0,MAMethod,PRICE_CLOSE);  // Calculate MA value
+   double currentBid=SymbolInfoDouble(Symbol(),SYMBOL_BID);             // Get current bid price
+   double currentAsk=SymbolInfoDouble(Symbol(),SYMBOL_ASK);             // Get current ask price
+   double currentSpread=currentAsk-currentBid;                           // Calculate current spread
+
+   //--- Check spread limit
+   if(currentSpread>SpreadLimit)
+     {
+      Print('Spread exceeds the limit!');
+      return;
+     }
+
+   //--- Calculate lot size
+   if(MM)
+     {
+      lotSize=AccountBalance()*AutoLotSize/1000;
+     }
+   else
+     {
+      lotSize=ManualLotSize;
+     }
+
+   //--- Check if there is an open position
+   if(PositionSelect(Symbol()))
+     {
+      //--- Check if the position is profitable
+      if(PositionGetDouble(POSITION_PROFIT)>0)
+        {
+         //--- Set trailing stop
+         bool trailingStop=OrderModify(ticket,0,currentBid-StopLoss*Point,currentAsk+StopLoss*Point,0,CLR_NONE);
+         if(trailingStop)
+            Print('Trailing stop set successfully!');
+         else
+            Print('Failed to set trailing stop!');
+        }
+     }
+   else
+     {
+      //--- Open a new position
+      if(currentBid>MA)
+        {
+         ticket=OrderSend(Symbol(),OP_BUY,lotSize,currentBid,3,currentBid-StopLoss*Point,currentAsk+StopLoss*Point);
+         if(ticket>0)
+            Print('Buy order placed successfully!');
+         else
+            Print('Failed to place buy order!');
+        }
+      else if(currentBid<MA)
+        {
+         ticket=OrderSend(Symbol(),OP_SELL,lotSize,currentAsk,3,currentBid+StopLoss*Point,currentAsk-StopLoss*Point);
+         if(ticket>0)
+            Print('Sell order placed successfully!');
+         else
+            Print('Failed to place sell order!');
+        }
+     }
+  }
